@@ -41,6 +41,62 @@ function nma_block_user_insert_data( $data, $update ) {
 add_filter( 'wp_pre_insert_user_data', 'nma_block_user_insert_data', 999, 2 );
 
 /**
+ * Φιλτράρει τα REST endpoints χρηστών όταν το option nma_prevent_api_users
+ * είναι ενεργό.
+ *
+ * - Μη συνδεδεμένοι: αφαιρούνται ΟΛΕΣ οι διαδρομές /wp/v2/users* (GET και
+ *   POST). Το endpoint φαίνεται εντελώς ανύπαρκτο (αυθεντικό rest_no_route
+ *   404, ούτε στο discovery) και κλείνει και το user enumeration μέσω του
+ *   ανώνυμου GET (λίστα συντακτών δημοσιευμένων άρθρων).
+ * - Συνδεδεμένοι: αφαιρείται μόνο το POST (δημιουργία), ώστε να συνεχίσουν
+ *   να δουλεύουν όσα admin features διαβάζουν χρήστες μέσω REST
+ *   (π.χ. το dropdown συντάκτη του Gutenberg).
+ *
+ * Προστασία σε επίπεδο WordPress (ανεξάρτητη από το SQL trigger).
+ *
+ * @param array $endpoints Τα καταχωρημένα REST endpoints.
+ * @return array
+ */
+function nma_filter_rest_user_endpoints( $endpoints ) {
+	if ( ! nma_option_enabled( 'nma_prevent_api_users' ) ) {
+		return $endpoints;
+	}
+
+	if ( ! is_user_logged_in() ) {
+		foreach ( array_keys( $endpoints ) as $route ) {
+			if ( '/wp/v2/users' === $route || 0 === strpos( $route, '/wp/v2/users/' ) ) {
+				unset( $endpoints[ $route ] );
+			}
+		}
+
+		return $endpoints;
+	}
+
+	if ( empty( $endpoints['/wp/v2/users'] ) || ! is_array( $endpoints['/wp/v2/users'] ) ) {
+		return $endpoints;
+	}
+
+	foreach ( $endpoints['/wp/v2/users'] as $index => $handler ) {
+		if ( ! is_int( $index ) || ! isset( $handler['methods'] ) ) {
+			continue;
+		}
+
+		// Το 'methods' μπορεί να είναι string ('POST' ή 'GET, POST') ή array.
+		$methods = $handler['methods'];
+		if ( is_string( $methods ) ) {
+			$methods = array_map( 'trim', explode( ',', $methods ) );
+		}
+
+		if ( in_array( 'POST', (array) $methods, true ) ) {
+			unset( $endpoints['/wp/v2/users'][ $index ] );
+		}
+	}
+
+	return $endpoints;
+}
+add_filter( 'rest_endpoints', 'nma_filter_rest_user_endpoints' );
+
+/**
  * Αποτρέπει την αποστολή των emails ειδοποίησης νέου χρήστη όταν ο χρήστης
  * δεν δημιουργήθηκε.
  *

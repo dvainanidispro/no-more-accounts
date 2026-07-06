@@ -16,6 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * ώστε τυχόν σφάλματα (π.χ. δικαιώματα) να εμφανίζονται καθαρά.
  */
 function nma_install() {
+	add_option( 'nma_prevent_api_users', '0' );
 	add_option( 'nma_prevent_users', '0' );
 	add_option( 'nma_prevent_admins', '0' );
 }

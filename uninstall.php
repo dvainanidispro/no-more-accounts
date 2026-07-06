@@ -14,5 +14,6 @@ require_once __DIR__ . '/includes/triggers.php';
 
 nma_drop_triggers();
 
+delete_option( 'nma_prevent_api_users' );
 delete_option( 'nma_prevent_users' );
 delete_option( 'nma_prevent_admins' );

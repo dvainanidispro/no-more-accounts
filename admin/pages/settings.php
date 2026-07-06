@@ -73,8 +73,17 @@ function nma_settings_page_save() {
 	if ( isset( $_POST['nma_settings_submit'] ) ) {
 		check_admin_referer( 'nma_save_settings' );
 
-		update_option( 'nma_prevent_users', isset( $_POST['nma_prevent_users'] ) ? '1' : '0' );
-		update_option( 'nma_prevent_admins', isset( $_POST['nma_prevent_admins'] ) ? '1' : '0' );
+		update_option( 'nma_prevent_api_users', isset( $_POST['nma_prevent_api_users'] ) ? '1' : '0' );
+
+		// Το radio "nma_prevent_mode" της φόρμας μεταφράζεται στα δύο
+		// υπάρχοντα options — ο υπόλοιπος κώδικας δεν αλλάζει.
+		$mode = isset( $_POST['nma_prevent_mode'] ) ? sanitize_key( wp_unslash( $_POST['nma_prevent_mode'] ) ) : 'none';
+		if ( ! in_array( $mode, array( 'none', 'users', 'admins' ), true ) ) {
+			$mode = 'none';
+		}
+
+		update_option( 'nma_prevent_users', 'users' === $mode ? '1' : '0' );
+		update_option( 'nma_prevent_admins', 'admins' === $mode ? '1' : '0' );
 
 		nma_set_settings_notice( 'success', 'Οι ρυθμίσεις αποθηκεύτηκαν.' );
 
@@ -89,13 +98,23 @@ function nma_settings_page_save() {
 function nma_settings_page_render() {
 	// Δημιουργία των options με προεπιλογή "ανενεργό" αν λείπουν
 	// (π.χ. αν το plugin δεν εγκαταστάθηκε μέσω activation hook).
+	add_option( 'nma_prevent_api_users', '0' );
 	add_option( 'nma_prevent_users', '0' );
 	add_option( 'nma_prevent_admins', '0' );
 
+	$prevent_api    = nma_option_enabled( 'nma_prevent_api_users' );
 	$prevent_users  = nma_option_enabled( 'nma_prevent_users' );
 	$prevent_admins = nma_option_enabled( 'nma_prevent_admins' );
 	$can_triggers   = nma_db_can_create_triggers();
 	$trigger_status = nma_user_trigger_status();
+
+	// Η τρέχουσα επιλογή του radio, από τις τιμές των δύο options.
+	$prevent_mode = 'none';
+	if ( $prevent_users ) {
+		$prevent_mode = 'users';
+	} elseif ( $prevent_admins ) {
+		$prevent_mode = 'admins';
+	}
 
 	$notice = get_transient( 'nma_settings_notice_' . get_current_user_id() );
 	if ( $notice ) {
@@ -175,7 +194,7 @@ function nma_settings_page_render() {
 
 		<h2>Trigger βάσης δεδομένων</h2>
 		<p>
-			Το trigger είναι στατικό και πάντα το ίδιο: μπλοκάρει νέες εγγραφές στον πίνακα
+			Το trigger μπλοκάρει νέες εγγραφές στον πίνακα
 			χρηστών μόνο όταν η επιλογή «Αποτροπή νέων χρηστών» είναι ενεργή.
 			Η εγκατάσταση είναι ασφαλής να επαναληφθεί (λειτουργεί και ως επιδιόρθωση).
 		</p>
@@ -191,23 +210,43 @@ function nma_settings_page_render() {
 			<table class="form-table" role="presentation">
 				<tbody>
 					<tr>
-						<th scope="row">Αποτροπή νέων χρηστών</th>
+						<th scope="row">Αποτροπή νέων χρηστών μέσω REST API</th>
 						<td>
-							<label for="nma_prevent_users">
-								<input type="checkbox" name="nma_prevent_users" id="nma_prevent_users" value="1" <?php checked( $prevent_users ); ?> />
-								Αποτροπή δημιουργίας νέων χρηστών (οποιουδήποτε ρόλου) σε επίπεδο βάσης δεδομένων
+							<label for="nma_prevent_api_users">
+								<input type="checkbox" name="nma_prevent_api_users" id="nma_prevent_api_users" value="1" <?php checked( $prevent_api ); ?> />
+								Αποτροπή δημιουργίας νέων χρηστών μέσω του REST API του WordPress
+								και πλήρης απόκρυψη του endpoint χρηστών για μη συνδεδεμένους χρήστες (προτείνεται).
 							</label>
-							<!-- <p class="description">Απαιτεί το trigger να είναι εγκατεστημένο (βλ. παραπάνω).</p> -->
+							<p class="description">
+								Για μη συνδεδεμένους, όλο το endpoint χρηστών (<code>/wp/v2/users</code>) εμφανίζεται
+								ανύπαρκτο — αποτρέπεται έτσι και το user enumeration. Για συνδεδεμένους αφαιρείται
+								μόνο η δημιουργία (<code>POST</code>), ώστε να λειτουργεί κανονικά το wp-admin.
+								Προστασία σε επίπεδο WordPress — δεν απαιτεί το trigger της βάσης.
+								Σημείωση: το endpoint εμφανίζεται ανύπαρκτο και σε συνδεδεμένους χρήστες που το
+								ανοίγουν απευθείας στον browser — ορατό παραμένει μόνο για εξουσιοδοτημένα αιτήματα
+								του wp-admin (π.χ. Gutenberg) ή με Application Password.
+							</p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row">Αποτροπή νέων administrators</th>
+						<th scope="row">Αποτροπή δημιουργίας χρηστών σε επίπεδο βάσης δεδομένων (απαιτεί το trigger της βάσης)</th>
 						<td>
-							<label for="nma_prevent_admins">
-								<input type="checkbox" name="nma_prevent_admins" id="nma_prevent_admins" value="1" <?php checked( $prevent_admins ); ?> />
-								Αποτροπή δημιουργίας νέων administrators σε επίπεδο βάσης δεδομένων
-							</label>
-							<p class="description">Η λειτουργία αυτή δεν έχει υλοποιηθεί ακόμα.</p>
+							<fieldset>
+								<legend class="screen-reader-text"><span>Αποτροπή δημιουργίας χρηστών σε επίπεδο βάσης δεδομένων</span></legend>
+								<label>
+									<input type="radio" name="nma_prevent_mode" value="none" <?php checked( 'none', $prevent_mode ); ?> />
+									Επιτρέπεται η δημιουργία χρηστών
+								</label><br />
+								<label>
+									<input type="radio" name="nma_prevent_mode" value="users" <?php checked( 'users', $prevent_mode ); ?> />
+									Αποτροπή δημιουργίας νέων χρηστών (οποιουδήποτε ρόλου)
+								</label><br />
+								<label>
+									<input type="radio" name="nma_prevent_mode" value="admins" <?php checked( 'admins', $prevent_mode ); ?> />
+									Αποτροπή δημιουργίας νέων administrators
+								</label>
+								<p class="description">Η αποτροπή δημιουργίας νέων administrators δεν έχει υλοποιηθεί ακόμα.</p>
+							</fieldset>
 						</td>
 					</tr>
 				</tbody>
