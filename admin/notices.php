@@ -22,10 +22,10 @@ function nma_user_new_admin_notice() {
 		return;
 	}
 
-	if ( ! nma_user_protection_active() ) {
-		return;
+	if ( nma_user_protection_active() ) {
+		echo '<div class="notice notice-warning"><p><strong>Η δημιουργία χρηστών είναι μπλοκαρισμένη.</strong></p></div>';
+	} elseif ( nma_admin_protection_active() ) {
+		echo '<div class="notice notice-warning"><p><strong>Η δημιουργία administrator είναι μπλοκαρισμένη.</strong></p></div>';
 	}
-
-	echo '<div class="notice notice-warning"><p><strong>Η δημιουργία χρηστών είναι μπλοκαρισμένη.</strong></p></div>';
 }
 add_action( 'admin_notices', 'nma_user_new_admin_notice' );

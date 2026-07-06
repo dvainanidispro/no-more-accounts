@@ -44,9 +44,9 @@ function nma_settings_page_save() {
 		$result = nma_create_triggers();
 
 		if ( is_wp_error( $result ) ) {
-			nma_set_settings_notice( 'error', 'Η εγκατάσταση του trigger απέτυχε: ' . $result->get_error_message() );
+			nma_set_settings_notice( 'error', 'Η εγκατάσταση των triggers απέτυχε: ' . $result->get_error_message() );
 		} else {
-			nma_set_settings_notice( 'success', 'Το trigger εγκαταστάθηκε στη βάση δεδομένων.' );
+			nma_set_settings_notice( 'success', 'Τα triggers εγκαταστάθηκαν στη βάση δεδομένων.' );
 		}
 
 		wp_safe_redirect( $redirect );
@@ -60,9 +60,9 @@ function nma_settings_page_save() {
 		$result = nma_drop_triggers();
 
 		if ( is_wp_error( $result ) ) {
-			nma_set_settings_notice( 'error', 'Η αφαίρεση του trigger απέτυχε: ' . $result->get_error_message() );
+			nma_set_settings_notice( 'error', 'Η αφαίρεση των triggers απέτυχε: ' . $result->get_error_message() );
 		} else {
-			nma_set_settings_notice( 'success', 'Το trigger αφαιρέθηκε από τη βάση δεδομένων.' );
+			nma_set_settings_notice( 'success', 'Τα triggers αφαιρέθηκαν από τη βάση δεδομένων.' );
 		}
 
 		wp_safe_redirect( $redirect );
@@ -93,6 +93,21 @@ function nma_settings_page_save() {
 }
 
 /**
+ * Τυπώνει την ένδειξη κατάστασης ενός trigger.
+ *
+ * @param string $status 'ok' | 'missing' | 'different'.
+ */
+function nma_trigger_status_badge( $status ) {
+	if ( 'ok' === $status ) {
+		echo '<span style="color: #00a32a; font-weight: 600;">✔ Εγκατεστημένο.</span>';
+	} elseif ( 'different' === $status ) {
+		echo '<span style="color: #dba617; font-weight: 600;">! Υπάρχει, αλλά διαφέρει από το αναμενόμενο — προτείνεται επιδιόρθωση.</span>';
+	} else {
+		echo '<span style="color: #d63638; font-weight: 600;">✘ Δεν είναι εγκατεστημένο.</span>';
+	}
+}
+
+/**
  * Εμφανίζει τη σελίδα ρυθμίσεων.
  */
 function nma_settings_page_render() {
@@ -107,6 +122,14 @@ function nma_settings_page_render() {
 	$prevent_admins = nma_option_enabled( 'nma_prevent_admins' );
 	$can_triggers   = nma_db_can_create_triggers();
 	$trigger_status = nma_user_trigger_status();
+
+	$meta_insert_status = nma_usermeta_insert_trigger_status();
+	$meta_update_status = nma_usermeta_update_trigger_status();
+	$admin_triggers_ok  = ( 'ok' === $meta_insert_status && 'ok' === $meta_update_status );
+
+	$any_trigger_present = ( 'missing' !== $trigger_status
+		|| 'missing' !== $meta_insert_status
+		|| 'missing' !== $meta_update_status );
 
 	// Η τρέχουσα επιλογή του radio, από τις τιμές των δύο options.
 	$prevent_mode = 'none';
@@ -134,14 +157,24 @@ function nma_settings_page_render() {
 			<div class="notice notice-warning">
 				<p>
 					<strong>Προσοχή:</strong> Η «Αποτροπή νέων χρηστών» είναι ενεργή, αλλά το trigger
-					δεν είναι εγκατεστημένο σωστά στη βάση — η προστασία <strong>δεν</strong> ισχύει.
-					Πατήστε «Εγκατάσταση / επιδιόρθωση trigger» παρακάτω.
+					του πίνακα χρηστών δεν είναι εγκατεστημένο σωστά στη βάση — η προστασία
+					<strong>δεν</strong> ισχύει. Πατήστε «Εγκατάσταση / επιδιόρθωση triggers» παρακάτω.
+				</p>
+			</div>
+		<?php endif; ?>
+
+		<?php if ( $prevent_admins && ! $admin_triggers_ok ) : ?>
+			<div class="notice notice-warning">
+				<p>
+					<strong>Προσοχή:</strong> Η «Αποτροπή νέων administrators» είναι ενεργή, αλλά τα
+					triggers του πίνακα usermeta δεν είναι εγκατεστημένα σωστά στη βάση — η προστασία
+					<strong>δεν</strong> ισχύει. Πατήστε «Εγκατάσταση / επιδιόρθωση triggers» παρακάτω.
 				</p>
 			</div>
 		<?php endif; ?>
 
 		<h2>Κατάσταση βάσης δεδομένων</h2>
-		<table class="widefat striped" style="max-width: 700px;">
+		<table class="widefat striped" style="max-width: 1200px;">
 			<tbody>
 				<tr>
 					<td>Δικαίωμα δημιουργίας triggers (TRIGGER privilege)</td>
@@ -157,20 +190,25 @@ function nma_settings_page_render() {
 				</tr>
 				<tr>
 					<td>Trigger πίνακα χρηστών (<code><?php echo esc_html( nma_user_trigger_name() ); ?></code>)</td>
+					<td><?php nma_trigger_status_badge( $trigger_status ); ?></td>
+				</tr>
+				<tr>
+					<td>Trigger πίνακα usermeta — INSERT (<code><?php echo esc_html( nma_usermeta_insert_trigger_name() ); ?></code>)</td>
+					<td><?php nma_trigger_status_badge( $meta_insert_status ); ?></td>
+				</tr>
+				<tr>
+					<td>Trigger πίνακα usermeta — UPDATE (<code><?php echo esc_html( nma_usermeta_update_trigger_name() ); ?></code>)</td>
+					<td><?php nma_trigger_status_badge( $meta_update_status ); ?></td>
+				</tr>
+				<tr>
+					<td>Διαχείριση triggers</td>
 					<td>
-						<?php if ( 'ok' === $trigger_status ) : ?>
-							<span style="color: #00a32a; font-weight: 600;">✔ Εγκατεστημένο.</span>
-						<?php elseif ( 'different' === $trigger_status ) : ?>
-							<span style="color: #dba617; font-weight: 600;">! Υπάρχει, αλλά διαφέρει από το αναμενόμενο — προτείνεται επιδιόρθωση.</span>
-						<?php else : ?>
-							<span style="color: #d63638; font-weight: 600;">✘ Δεν είναι εγκατεστημένο.</span>
-						<?php endif; ?>
-						<form method="post" action="" style="margin-top: 8px;">
+						<form method="post" action="">
 							<?php wp_nonce_field( 'nma_manage_triggers' ); ?>
-							<input type="submit" name="nma_install_triggers" class="button button-primary button-small" value="Εγκατάσταση / επιδιόρθωση trigger" />
-							<?php if ( 'missing' !== $trigger_status ) : ?>
-								<input type="submit" name="nma_remove_triggers" class="button button-small" value="Αφαίρεση trigger"
-									onclick="return confirm('Να αφαιρεθεί το trigger από τη βάση; Η αποτροπή δημιουργίας χρηστών θα πάψει να ισχύει.');" />
+							<input type="submit" name="nma_install_triggers" class="button button-primary button-small" value="Εγκατάσταση / επιδιόρθωση triggers" />
+							<?php if ( $any_trigger_present ) : ?>
+								<input type="submit" name="nma_remove_triggers" class="button button-small" value="Αφαίρεση triggers"
+									onclick="return confirm('Να αφαιρεθούν τα triggers από τη βάση; Η αποτροπή δημιουργίας χρηστών και administrators θα πάψει να ισχύει.');" />
 							<?php endif; ?>
 						</form>
 					</td>
@@ -192,15 +230,20 @@ function nma_settings_page_render() {
 			</div>
 		<?php endif; ?>
 
-		<h2>Trigger βάσης δεδομένων</h2>
+		<h2>Triggers βάσης δεδομένων</h2>
 		<p>
-			Το trigger μπλοκάρει νέες εγγραφές στον πίνακα
-			χρηστών μόνο όταν η επιλογή «Αποτροπή νέων χρηστών» είναι ενεργή.
-			Η εγκατάσταση είναι ασφαλής να επαναληφθεί (λειτουργεί και ως επιδιόρθωση).
+			Το trigger του πίνακα χρηστών μπλοκάρει
+			νέες εγγραφές όταν είναι ενεργή η «Αποτροπή δημιουργίας νέων χρηστών». 
+            Τα δύο triggers
+			του πίνακα usermeta μπλοκάρουν την απόδοση του ρόλου administrator (σε νέο ή υπάρχοντα
+			χρήστη) όταν είναι ενεργή η «Αποτροπή δημιουργίας νέων administrator».
+			Η εγκατάσταση τους ασφαλής να επαναληφθεί (λειτουργεί και ως επιδιόρθωση).
 		</p>
 		<details style="max-width: 700px; margin-bottom: 12px;">
-			<summary>Προβολή SQL του trigger που εγκαθιστά αυτό το πρόσθετο</summary>
-			<pre style="background: #f6f7f7; padding: 12px; overflow-x: auto;"><?php echo esc_html( nma_user_trigger_sql() ); ?></pre>
+			<summary>Προβολή SQL των triggers που εγκαθιστά αυτό το πρόσθετο</summary>
+			<?php foreach ( nma_trigger_definitions() as $nma_trigger ) : ?>
+				<pre style="background: #f6f7f7; padding: 12px; overflow-x: auto;"><?php echo esc_html( $nma_trigger['sql'] ); ?></pre>
+			<?php endforeach; ?>
 		</details>
 
 		<h2>Ρυθμίσεις</h2>
@@ -219,11 +262,11 @@ function nma_settings_page_render() {
 							</label>
 							<p class="description">
 								Για μη συνδεδεμένους, όλο το endpoint χρηστών (<code>/wp/v2/users</code>) εμφανίζεται
-								ανύπαρκτο — αποτρέπεται έτσι και το user enumeration. Για συνδεδεμένους αφαιρείται
+								ανύπαρκτο, αποτρέπεται έτσι και το user enumeration. Για συνδεδεμένους χρήστες, αφαιρείται
 								μόνο η δημιουργία (<code>POST</code>), ώστε να λειτουργεί κανονικά το wp-admin.
-								Προστασία σε επίπεδο WordPress — δεν απαιτεί το trigger της βάσης.
+								Είναι προστασία σε επίπεδο WordPress, οπότε δεν απαιτεί το trigger της βάσης.
 								Σημείωση: το endpoint εμφανίζεται ανύπαρκτο και σε συνδεδεμένους χρήστες που το
-								ανοίγουν απευθείας στον browser — ορατό παραμένει μόνο για εξουσιοδοτημένα αιτήματα
+								ανοίγουν απευθείας στον browser, ενώ παραμένει ορατό μόνο για εξουσιοδοτημένα αιτήματα
 								του wp-admin (π.χ. Gutenberg) ή με Application Password.
 							</p>
 						</td>
@@ -243,9 +286,13 @@ function nma_settings_page_render() {
 								</label><br />
 								<label>
 									<input type="radio" name="nma_prevent_mode" value="admins" <?php checked( 'admins', $prevent_mode ); ?> />
-									Αποτροπή δημιουργίας νέων administrators
+									Αποτροπή δημιουργίας νέων administrator
 								</label>
-								<p class="description">Η αποτροπή δημιουργίας νέων administrators δεν έχει υλοποιηθεί ακόμα.</p>
+								<p class="description">
+								Η αποτροπή νέων administrator μπλοκάρει και την αναβάθμιση υπάρχοντος χρήστη
+								σε administrator (privilege escalation). Αν επιχειρηθεί δημιουργία νέου χρήστη
+								ως administrator, ο χρήστης θα δημιουργηθεί αλλά χωρίς κανέναν ρόλο.
+							</p>
 							</fieldset>
 						</td>
 					</tr>

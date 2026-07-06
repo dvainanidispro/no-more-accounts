@@ -31,6 +31,19 @@ function nma_user_protection_active() {
 }
 
 /**
+ * Επιστρέφει true αν η αποτροπή δημιουργίας administrators είναι πραγματικά
+ * ενεργή: το option ενεργοποιημένο ΚΑΙ τα δύο triggers του usermeta σωστά
+ * εγκατεστημένα στη βάση.
+ *
+ * @return bool
+ */
+function nma_admin_protection_active() {
+	return nma_option_enabled( 'nma_prevent_admins' )
+		&& 'ok' === nma_usermeta_insert_trigger_status()
+		&& 'ok' === nma_usermeta_update_trigger_status();
+}
+
+/**
  * Ελέγχει αν ο χρήστης της βάσης δεδομένων έχει δικαίωμα δημιουργίας triggers.
  *
  * Διαβάζει τα grants του τρέχοντος MySQL χρήστη και ψάχνει για
