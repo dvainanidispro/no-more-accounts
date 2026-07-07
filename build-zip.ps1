@@ -29,14 +29,6 @@ $include = @(
 )
 
 try {
-	# Διαβάζουμε την έκδοση από το header του κύριου αρχείου για το όνομα του zip.
-	$mainFile = Join-Path $root 'no-more-accounts.php'
-	$version  = 'unknown'
-	$match    = Select-String -Path $mainFile -Pattern 'Version:\s*([0-9][^\s]*)' | Select-Object -First 1
-	if ($match) {
-		$version = $match.Matches[0].Groups[1].Value
-	}
-
 	# dist/ (δημιουργείται αν δεν υπάρχει - είναι στο .gitignore).
 	if (-not (Test-Path $distDir)) {
 		New-Item -ItemType Directory -Path $distDir | Out-Null
@@ -54,12 +46,37 @@ try {
 		Copy-Item -Path $source -Destination $stageDir -Recurse
 	}
 
-	$zipPath = Join-Path $distDir ("$pluginSlug-$version.zip")
+	$zipPath = Join-Path $distDir ("$pluginSlug.zip")
 	if (Test-Path $zipPath) {
 		Remove-Item $zipPath -Force
 	}
 
-	Compress-Archive -Path $stageDir -DestinationPath $zipPath
+	# Δεν χρησιμοποιούμε Compress-Archive: στο Windows PowerShell 5.1 γράφει τα
+	# entries με backslash ('admin\notices.php'), οπότε το zip αποσυμπιέζεται
+	# λάθος σε Linux (όλα flat, με το '\' μέσα στο όνομα αρχείου). Φτιάχνουμε
+	# το zip με το .NET ZipArchive και ρητά forward slashes στα ονόματα.
+	Add-Type -AssemblyName System.IO.Compression
+	Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+	# Το $env:TEMP μπορεί να είναι σε μορφή short path (π.χ. VAINAN~1), ενώ το
+	# Get-ChildItem επιστρέφει πλήρη ονόματα - παίρνουμε το resolved path ώστε
+	# το Substring παρακάτω να κόβει στο σωστό σημείο.
+	$stageRootResolved = (Get-Item -LiteralPath $stageRoot).FullName
+
+	$zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
+	try {
+		Get-ChildItem -Path $stageDir -Recurse -File | ForEach-Object {
+			# Διαδρομή σχετική ως προς το stageRoot, ώστε τα αρχεία να μπουν
+			# μέσα σε φάκελο "no-more-accounts/" όπως τον περιμένει το WordPress.
+			$entryName = $_.FullName.Substring($stageRootResolved.Length + 1) -replace '\\', '/'
+			[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+				$zip, $_.FullName, $entryName,
+				[System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+		}
+	}
+	finally {
+		$zip.Dispose()
+	}
 
 	Write-Host ''
 	Write-Host "OK - Δημιουργήθηκε: $zipPath" -ForegroundColor Green

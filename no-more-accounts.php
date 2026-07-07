@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       No more accounts
  * Description:       Αποτρέπει τη δημιουργία νέων χρηστών σε επίπεδο βάσης δεδομένων.
- * Version:           1.0.0
+ * Version:           1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Computer Studio
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Βασικές σταθερές του plugin.
-define( 'NMA_VERSION', '1.0.0' );
+define( 'NMA_VERSION', '1.0' );
 define( 'NMA_PLUGIN_FILE', __FILE__ );
 define( 'NMA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NMA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
